@@ -69,7 +69,7 @@ class RealEnv:
         video_dir.mkdir(parents=True, exist_ok=True)
         zarr_path = str(output_dir.joinpath('replay_buffer.zarr').absolute())
         replay_buffer = ReplayBuffer.create_from_path(
-            zarr_path=zarr_path, mode='a')
+            zarr_path=zarr_path, mode='a')      #创建可以追加的zarr数据集存储
 
         if shm_manager is None:
             shm_manager = SharedMemoryManager()
@@ -102,7 +102,7 @@ class RealEnv:
         )
         def vis_transform(data):
             data['color'] = vis_color_transform(data['color'])
-            return data
+            return data                                           #可视化
 
         recording_transfrom = None
         recording_fps = video_capture_fps
@@ -411,7 +411,7 @@ class RealEnv:
             n_steps = min(len(obs_timestamps), len(action_timestamps))
             if n_steps > 0:
                 episode = dict()
-                episode['timestamp'] = obs_timestamps[:n_steps]
+                episode['timestamp'] = obs_timestamps[:n_steps]    #选取前nsteps
                 episode['action'] = actions[:n_steps]
                 episode['stage'] = stages[:n_steps]
                 for key, value in obs_data.items():

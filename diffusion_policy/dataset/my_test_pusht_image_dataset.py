@@ -23,7 +23,7 @@ class PushTImageDataset(BaseImageDataset):    #实例化数据集 here
         
         super().__init__()
         self.replay_buffer = ReplayBuffer.copy_from_path(
-            zarr_path, keys=['img', 'state', 'action'])
+            zarr_path, keys=['img', 'state', 'action','my_state_new'])
         val_mask = get_val_mask(
             n_episodes=self.replay_buffer.n_episodes, 
             val_ratio=val_ratio,
@@ -60,7 +60,9 @@ class PushTImageDataset(BaseImageDataset):    #实例化数据集 here
     def get_normalizer(self, mode='limits', **kwargs):
         data = {
             'action': self.replay_buffer['action'],
-            'agent_pos': self.replay_buffer['state'][...,:2]
+            'agent_pos': self.replay_buffer['state'][...,:2],
+            'my_agent_pos': self.replay_buffer['my_state_new'][...,:2]
+
         }
         normalizer = LinearNormalizer()
         normalizer.fit(data=data, last_n_dims=1, mode=mode, **kwargs)
@@ -71,6 +73,7 @@ class PushTImageDataset(BaseImageDataset):    #实例化数据集 here
         return len(self.sampler)
 
     def _sample_to_data(self, sample): #数据集采集
+        my_agent_pos = sample['my_state_new'][:,:2].astype(np.float32)
         agent_pos = sample['state'][:,:2].astype(np.float32) # (agent_posx2, block_posex3)
         image = np.moveaxis(sample['img'],-1,1)/255
 
@@ -78,6 +81,7 @@ class PushTImageDataset(BaseImageDataset):    #实例化数据集 here
             'obs': {
                 'image': image, # T, 3, 96, 96
                 'agent_pos': agent_pos, # T, 2
+                'my_agent_pos':my_agent_pos
             },
             'action': sample['action'].astype(np.float32) # T, 2
         }

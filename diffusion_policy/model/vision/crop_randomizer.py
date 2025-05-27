@@ -77,12 +77,12 @@ class CropRandomizer(nn.Module):
         # and so the other dimensions retain their shape.
         return list(input_shape)
 
-    def forward_in(self, inputs):
+    def forward_in(self, inputs):    
         """
         Samples N random crops for each input in the batch, and then reshapes
         inputs to [B * N, ...].
         """
-        assert len(inputs.shape) >= 3 # must have at least (C, H, W) dimensions
+        assert len(inputs.shape) >= 3 # must have at least (C, H, W) dimensions     [128 3 96 96]   从robomic 过来 所以只有图像策略（传入策略不同，先是底层代码，然后是这里复写的代码）
         if self.training:
             # generate random crops
             out, _ = sample_random_image_crops(
@@ -91,7 +91,7 @@ class CropRandomizer(nn.Module):
                 crop_width=self.crop_width, 
                 num_crops=self.num_crops,
                 pos_enc=self.pos_enc,
-            )
+            )                         #[128 1 3 84 84]   只裁剪了一块 多了一个维度 增加鲁棒性
             # [B, N, ...] -> [B * N, ...]
             return tu.join_dimensions(out, 0, 1)
         else:
@@ -111,7 +111,7 @@ class CropRandomizer(nn.Module):
         what would have happened if there were no randomization.
         """
         if self.num_crops <= 1:
-            return inputs
+            return inputs         #[128 64]
         else:
             batch_size = (inputs.shape[0] // self.num_crops)
             out = tu.reshape_dimensions(inputs, begin_axis=0, end_axis=0, 

@@ -7,6 +7,7 @@ import zarr
 import numcodecs
 import multiprocessing
 import concurrent.futures
+import cv2
 from tqdm import tqdm
 from diffusion_policy.common.replay_buffer import ReplayBuffer, get_optimal_chunks
 from diffusion_policy.common.cv2_util import get_image_transform
@@ -55,15 +56,13 @@ def real_data_to_replay_buffer(
         image_compressor = Jpeg2k(level=50)
 
     # verify input
-    input = pathlib.Path(os.path.expanduser(dataset_path))
-    in_zarr_path = input.joinpath('replay_buffer.zarr')
-    in_video_dir = input.joinpath('videos')
+    input = pathlib.Path(os.path.expanduser(dataset_path)) #输入目录
+    in_zarr_path = input.joinpath('replay_buffer.zarr')     #在这里有输入的zarr数据
     assert in_zarr_path.is_dir()
-    assert in_video_dir.is_dir()
-    
+
     in_replay_buffer = ReplayBuffer.create_from_path(str(in_zarr_path.absolute()), mode='r')
 
-    # save lowdim data to single chunk
+    # save lowdim data to single chunk  !!!!!
     chunks_map = dict()
     compressor_map = dict()
     for key, value in in_replay_buffer.data.items():
@@ -78,6 +77,13 @@ def real_data_to_replay_buffer(
         chunks=chunks_map,
         compressors=compressor_map
         )
+    in_img_res=dict() #这里是确定输入的分辨率，后面有进行裁剪操作'd435_1_color','d435_1_depth','d435_2_color','d435_2_depth','usb_camera'
+    in_img_res['d435_1_color']=[640,480]
+    in_img_res['d435_1_depth_color']=[640,480]
+    in_img_res['d435_2_color']=[640,480]
+    in_img_res['d435_2_depth_color']=[640,480]
+    in_img_res['usb_camera']=[3280,2464] #w,h
+
     
     # worker function
     def put_img(zarr_arr, zarr_idx, img):
@@ -91,104 +97,69 @@ def real_data_to_replay_buffer(
             return False
 
     
-    n_cameras = 0
-    camera_idxs = set() 
-    if image_keys is not None:
-        n_cameras = len(image_keys)
-        camera_idxs = set(int(x.split('_')[-1]) for x in image_keys)
-    else:
-        # estimate number of cameras
-        episode_video_dir = in_video_dir.joinpath(str(0))
-        episode_video_paths = sorted(episode_video_dir.glob('*.mp4'), key=lambda x: int(x.stem))
-        camera_idxs = set(int(x.stem) for x in episode_video_paths)
-        n_cameras = len(episode_video_paths)
-    
+    #在压缩low_dim数据的时候，从0开始压缩，那么选择压缩image数据的时候，也从episode0开始压缩
+
     n_steps = in_replay_buffer.n_steps
     episode_starts = in_replay_buffer.episode_ends[:] - in_replay_buffer.episode_lengths[:]
     episode_lengths = in_replay_buffer.episode_lengths
-    timestamps = in_replay_buffer['timestamp'][:]
+    timestamps = in_replay_buffer['timestamps'][:]
     dt = timestamps[1] - timestamps[0]
-
-    with tqdm(total=n_steps*n_cameras, desc="Loading image data", mininterval=1.0) as pbar:
-        # one chunk per thread, therefore no synchronization needed
+    n_cameras=5    #一共要压缩多少图片
+    with tqdm(total=n_steps*n_cameras, desc="Loading image data", mininterval=0.1) as pbar:     #n_steps就是一共有多少时间步需要压缩 每个时间步到底有几个相机
         with concurrent.futures.ThreadPoolExecutor(max_workers=n_encoding_threads) as executor:
             futures = set()
-            for episode_idx, episode_length in enumerate(episode_lengths):
-                episode_video_dir = in_video_dir.joinpath(str(episode_idx))
-                episode_start = episode_starts[episode_idx]
-
-                episode_video_paths = sorted(episode_video_dir.glob('*.mp4'), key=lambda x: int(x.stem))
-                this_camera_idxs = set(int(x.stem) for x in episode_video_paths)
-                if image_keys is None:
-                    for i in this_camera_idxs - camera_idxs:
-                        print(f"Unexpected camera {i} at episode {episode_idx}")
-                for i in camera_idxs - this_camera_idxs:
-                    print(f"Missing camera {i} at episode {episode_idx}")
-                    if image_keys is not None:
-                        raise RuntimeError(f"Missing camera {i} at episode {episode_idx}")
-
-                for video_path in episode_video_paths:
-                    camera_idx = int(video_path.stem)
-                    if image_keys is not None:
-                        # if image_keys provided, skip not used cameras
-                        if camera_idx not in camera_idxs:
-                            continue
-
-                    # read resolution
-                    with av.open(str(video_path.absolute())) as container:
-                        video = container.streams.video[0]
-                        vcc = video.codec_context
-                        this_res = (vcc.width, vcc.height)
-                    in_img_res = this_res
-
-                    arr_name = f'camera_{camera_idx}'
-                    # figure out save resolution
-                    out_img_res = in_img_res
-                    if isinstance(out_resolutions, dict):
-                        if arr_name in out_resolutions:
-                            out_img_res = tuple(out_resolutions[arr_name])
-                    elif out_resolutions is not None:
-                        out_img_res = tuple(out_resolutions)
-
-                    # allocate array
-                    if arr_name not in out_replay_buffer:
-                        ow, oh = out_img_res
-                        _ = out_replay_buffer.data.require_dataset(
-                            name=arr_name,
-                            shape=(n_steps,oh,ow,3),
-                            chunks=(1,oh,ow,3),
-                            compressor=image_compressor,
-                            dtype=np.uint8
-                        )
-                    arr = out_replay_buffer[arr_name]
-
-                    image_tf = get_image_transform(
-                        input_res=in_img_res, output_res=out_img_res, bgr_to_rgb=False)
-                    for step_idx, frame in enumerate(read_video(
-                            video_path=str(video_path),
-                            dt=dt,
-                            img_transform=image_tf,
-                            thread_type='FRAME',
-                            thread_count=n_decoding_threads
-                        )):
+        #     step_dirs = sorted([d for d in os.listdir(dataset_path)
+        #     if os.path.isdir(os.path.join(dataset_path, d)) and d.isdigit()
+        # ])
+            for episode_idx, episode_length in enumerate(episode_lengths):    #0 148 1 148 找到每一个episode    现在就是进入了每一个episode中进行添加图片
+                episode_start = episode_starts[episode_idx]  #从0开始寻找压缩
+                episode_dirs = sorted([d for d in os.listdir(dataset_path) if d.startswith('episode')])[episode_idx]
+                step_dirs_src=os.path.join(dataset_path,episode_dirs)
+                step_dirs = sorted([d for d in os.listdir(step_dirs_src)
+            if os.path.isdir(os.path.join(step_dirs_src, d)) and d.isdigit()
+            ])
+                for step_idx in tqdm(range(len(step_dirs))): #读取图片  step_idx->frame 
+                    arr_names={'d435_1_color','d435_1_depth_color','d435_2_color','d435_2_depth_color','usb_camera'}   #输入的都是三通道数据，在此之前要先进行转换
+                    for arr_name in arr_names:
+                        out_img_res = tuple(out_resolutions[arr_name])
+                        if arr_name not in out_replay_buffer:
+                                ow, oh = out_img_res
+                                _ = out_replay_buffer.data.require_dataset(
+                                    name=arr_name,
+                                    shape=(n_steps,oh,ow,3),
+                                    chunks=(1,oh,ow,3),
+                                    compressor=image_compressor,
+                                    dtype=np.uint8
+                                )
+                        arr = out_replay_buffer[arr_name]#找到对应的buffer    下面应该寻找相机
+                        img_name = arr_name+".png"
+                        # d435_1_color_path = os.path.join(episode_path, step_dirs[i], "d435_1_color.png")
+                        # d435_1_depth_path = os.path.join(episode_path, step_dirs[i], "d435_1_depth.png")
+                        # d435_2_color_path = os.path.join(episode_path, step_dirs[i], "d435_2_color.png")
+                        # d435_2_depth_path = os.path.join(episode_path, step_dirs[i], "d435_2_depth.png")
+                        # usb_camera_path = os.path.join(episode_path, step_dirs[i], "usb_camera.png")
+                        img_path=os.path.join(step_dirs_src, step_dirs[step_idx],img_name)
+                        img=cv2.imread(img_path)
+                        image_tf = get_image_transform(          
+                        input_res=in_img_res[arr_name], output_res=out_img_res, bgr_to_rgb=False)  #输入和输出的分辨率
+                        img_tf_out=image_tf(img)
                         if len(futures) >= max_inflight_tasks:
-                            # limit number of inflight tasks
                             completed, futures = concurrent.futures.wait(futures, 
                                 return_when=concurrent.futures.FIRST_COMPLETED)
                             for f in completed:
                                 if not f.result():
                                     raise RuntimeError('Failed to encode image!')
                             pbar.update(len(completed))
-                        
+        
                         global_idx = episode_start + step_idx
-                        futures.add(executor.submit(put_img, arr, global_idx, frame))
+                        futures.add(executor.submit(put_img, arr, global_idx, img_tf_out))
 
                         if step_idx == (episode_length - 1):
                             break
-            completed, futures = concurrent.futures.wait(futures)
-            for f in completed:
-                if not f.result():
-                    raise RuntimeError('Failed to encode image!')
-            pbar.update(len(completed))
+                completed, futures = concurrent.futures.wait(futures)
+                for f in completed:
+                    if not f.result():
+                        raise RuntimeError('Failed to encode image!')
+                pbar.update(len(completed))
     return out_replay_buffer
 

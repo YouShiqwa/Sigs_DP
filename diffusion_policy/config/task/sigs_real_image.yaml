@@ -1,0 +1,65 @@
+name: real_image
+
+image_shape: [3, 240, 320]
+dataset_path: /home/chengy/NewDisk/Data/SIGS/DP/replay_buffer.zarr
+#'d435_1_color','d435_1_depth','d435_2_color','d435_2_depth'
+shape_meta: &shape_meta
+  # acceptable types: rgb, low_dim，depth
+  obs:
+    d435_1_color:
+      shape: ${task.image_shape}
+      type: rgb
+    d435_1_depth_color:
+      shape: ${task.image_shape}
+      type: rgb
+    d435_2_color:
+      shape: ${task.image_shape}
+      type: rgb
+    d435_2_depth_color:
+      shape: ${task.image_shape}
+      type: rgb
+    usb_camera:
+      shape: ${task.image_shape}
+      type: rgb
+    joint_angles:
+      shape: [6]
+      type: low_dim
+    joint_speeds:
+      shape: [6]
+      type: low_dim
+    robot_pose:
+      shape: [6]
+      type: low_dim
+    tcp_speed:
+      shape: [6]
+      type: low_dim
+    gripper_angle:
+      shape: [1]
+      type: low_dim
+    force_datas:
+      shape: [6]
+      type: low_dim
+    timestamps:
+      shape: [1]
+      type: low_dim
+  action: 
+    shape: [7]
+
+env_runner:
+  _target_: diffusion_policy.env_runner.real_pusht_image_runner.RealPushTImageRunner
+
+dataset:
+  _target_: diffusion_policy.dataset.sigs_real_dataset.SIGSDataset
+  shape_meta: *shape_meta
+  dataset_path: ${task.dataset_path}
+  horizon: ${horizon}
+  pad_before: ${eval:'${n_obs_steps}-1+${n_latency_steps}'}
+  pad_after: ${eval:'${n_action_steps}-1'}
+  n_obs_steps: ${dataset_obs_steps}
+  n_latency_steps: ${n_latency_steps}
+  use_cache: True
+  seed: 42
+  val_ratio: 0.00
+  max_train_episodes: null
+  delta_action: False
+

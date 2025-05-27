@@ -57,7 +57,7 @@ class LowdimMaskGenerator(ModuleAttrMixin):
         self.action_visible = action_visible
 
     @torch.no_grad()
-    def forward(self, shape, seed=None):
+    def forward(self, shape, seed=None):         #shape[64 16 2]
         device = self.device
         B, T, D = shape
         assert D == (self.action_dim + self.obs_dim)
@@ -101,7 +101,7 @@ class LowdimMaskGenerator(ModuleAttrMixin):
         if self.action_visible:
             mask = mask | action_mask
         
-        return mask
+        return mask       #[64 16 2]
 
 
 class KeypointMaskGenerator(ModuleAttrMixin):

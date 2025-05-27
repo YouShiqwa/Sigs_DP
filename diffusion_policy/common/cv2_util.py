@@ -120,6 +120,60 @@ def get_image_transform(
         return img
     return transform
 
+# def my_get_image_transform(
+#         input_res: Tuple[int,int]=(1280,720),  #w h
+#         output_res: Tuple[int,int]=(640,480), 
+#         bgr_to_rgb: bool=False,
+#         is_depth: bool = False):
+
+#     iw, ih = input_res
+#     ow, oh = output_res
+#     rw, rh = None, None
+#     interp_method = cv2.INTER_AREA
+
+#     if (iw/ih) >= (ow/oh):
+#         # input is wider
+#         rh = oh
+#         rw = math.ceil(rh / ih * iw)
+#         if oh > ih:
+#             interp_method = cv2.INTER_LINEAR
+#     else:
+#         rw = ow
+#         rh = math.ceil(rw / iw * ih)
+#         if ow > iw:
+#             interp_method = cv2.INTER_LINEAR
+    
+#     w_slice_start = (rw - ow) // 2
+#     w_slice = slice(w_slice_start, w_slice_start + ow)
+#     h_slice_start = (rh - oh) // 2
+#     h_slice = slice(h_slice_start, h_slice_start + oh)
+#     if is_depth:
+#         c_slice = slice(None)  # 单通道图像无需切片操作
+#     else:
+#         c_slice = slice(None)
+#         if bgr_to_rgb:
+#             c_slice = slice(None, None, -1)
+
+#     if bgr_to_rgb:
+#         c_slice = slice(None, None, -1)
+
+#     def my_transform(img: np.ndarray):
+#         if not is_depth:
+#             assert img.shape == ((ih,iw,3))
+#         # resize
+#             img = cv2.resize(img, (rw, rh), interpolation=interp_method)
+#         # crop
+#             img = img[h_slice, w_slice, c_slice]
+#             return img
+#         else:
+#             img = cv2.resize(img, (rw, rh), interpolation=interp_method)
+#             img = np.expand_dims(img, axis=-1) 
+#         # crop
+#             img = img[h_slice, w_slice, c_slice]
+#             return img
+#     return my_transform
+
+
 def optimal_row_cols(
         n_cameras,
         in_wh_ratio,

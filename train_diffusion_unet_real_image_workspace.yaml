@@ -43,7 +43,7 @@ policy:
       _target_: diffusion_policy.model.vision.model_getter.get_resnet
       name: resnet18
       weights: null
-    resize_shape: [240, 320]   #可以在这里进行reshap0e
+    resize_shape: [240, 320]
     crop_shape: [216, 288] # ch, cw 240x320 90%
     random_crop: True
     use_group_norm: True
@@ -74,15 +74,15 @@ ema:
   max_value: 0.9999
 
 dataloader:
-  batch_size: 1 #!!!!! 64
-  num_workers: 4 #8
+  batch_size: 64
+  num_workers: 8
   shuffle: True
   pin_memory: True
   persistent_workers: True
 
 val_dataloader:
-  batch_size: 1 #64
-  num_workers: 4 #8
+  batch_size: 64
+  num_workers: 8
   shuffle: False
   pin_memory: True
   persistent_workers: True

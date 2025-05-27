@@ -134,7 +134,7 @@ class ReplayBuffer:
         return buffer
 
     @classmethod
-    def create_from_path(cls, zarr_path, mode='r', **kwargs):
+    def create_from_path(cls, zarr_path, mode='r', **kwargs):   #指定keys不指定的话就是复制所有keys
         """
         Open a on-disk zarr directly (for dataset larger than memory).
         Slower.
@@ -208,7 +208,7 @@ class ReplayBuffer:
         return buffer
     
     @classmethod
-    def copy_from_path(cls, zarr_path, backend=None, store=None, keys=None, 
+    def copy_from_path(cls, zarr_path, backend=None, store=None, keys=None,     #数据集的复制，转存
             chunks: Dict[str,tuple]=dict(), 
             compressors: Union[dict, str, numcodecs.abc.Codec]=dict(), 
             if_exists='replace',
@@ -442,7 +442,7 @@ class ReplayBuffer:
         lengths = np.diff(ends)
         return lengths
 
-    def add_episode(self, 
+    def add_episode(self,        #!!!!!处理数据压缩为
             data: Dict[str, np.ndarray], 
             chunks: Optional[Dict[str,tuple]]=dict(),
             compressors: Union[str, numcodecs.abc.Codec, dict]=dict()):

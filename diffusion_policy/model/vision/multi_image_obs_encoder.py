@@ -31,8 +31,8 @@ class MultiImageObsEncoder(ModuleAttrMixin):
 
         rgb_keys = list()
         low_dim_keys = list()
-        key_model_map = nn.ModuleDict()
-        key_transform_map = nn.ModuleDict()
+        key_model_map = nn.ModuleDict()  #!!!!!
+        key_transform_map = nn.ModuleDict()#!!!!!
         key_shape_map = dict()
 
         # handle sharing vision backbone
@@ -68,7 +68,7 @@ class MultiImageObsEncoder(ModuleAttrMixin):
                                 num_channels=x.num_features)
                         )
                     key_model_map[key] = this_model
-                
+
                 # configure resize
                 input_shape = shape
                 this_resizer = nn.Identity()
@@ -160,7 +160,7 @@ class MultiImageObsEncoder(ModuleAttrMixin):
                 else:
                     assert batch_size == img.shape[0]
                 assert img.shape[1:] == self.key_shape_map[key]
-                img = self.key_transform_map[key](img)
+                img = self.key_transform_map[key](img)       #128 3 240 360 -> 128 3 216 288
                 feature = self.key_model_map[key](img)
                 features.append(feature)
         

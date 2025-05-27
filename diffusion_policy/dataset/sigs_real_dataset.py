@@ -24,10 +24,9 @@ from diffusion_policy.common.normalize_util import (
     get_identity_normalizer_from_stat,
     array_to_stats
 )
-
-class RealPushTImageDataset(BaseImageDataset):
+class SIGSDataset(BaseImageDataset):
     def __init__(self,
-            shape_meta: dict,   #从数据集读取
+            shape_meta: dict,   #从数据集读取代码
             dataset_path: str,
             horizon=1,
             pad_before=0,
@@ -41,10 +40,10 @@ class RealPushTImageDataset(BaseImageDataset):
             delta_action=False,
         ):
         assert os.path.isdir(dataset_path)
-        
+
         replay_buffer = None
-        if use_cache:
-            # fingerprint shape_meta
+        if use_cache:    #   需要这一步，防止重复缓存数据集
+            # fingerprint shape_meta 
             shape_meta_json = json.dumps(OmegaConf.to_container(shape_meta), sort_keys=True)
             shape_meta_hash = hashlib.md5(shape_meta_json.encode('utf-8')).hexdigest()
             cache_zarr_path = os.path.join(dataset_path, shape_meta_hash + '.zarr.zip')
@@ -80,8 +79,7 @@ class RealPushTImageDataset(BaseImageDataset):
                 shape_meta=shape_meta,
                 store=zarr.MemoryStore()
             )
-        
-        if delta_action:
+        if delta_action:   #默认是false  将绝对位置动作转换成相对位移动作
             # replace action as relative to previous frame
             actions = replay_buffer['action'][:]
             # support positions only at this time
@@ -110,7 +108,7 @@ class RealPushTImageDataset(BaseImageDataset):
                 lowdim_keys.append(key)
         
         key_first_k = dict()
-        if n_obs_steps is not None:
+        if n_obs_steps is not None:  
             # only take first k obs from images
             for key in rgb_keys + lowdim_keys:
                 key_first_k[key] = n_obs_steps
@@ -144,7 +142,8 @@ class RealPushTImageDataset(BaseImageDataset):
         self.n_latency_steps = n_latency_steps
         self.pad_before = pad_before
         self.pad_after = pad_after
-        
+
+
     def get_validation_dataset(self):
         val_set = copy.copy(self)
         val_set.sampler = SequenceSampler(
@@ -156,6 +155,7 @@ class RealPushTImageDataset(BaseImageDataset):
             )
         val_set.val_mask = ~self.val_mask
         return val_set
+    
 
     def get_normalizer(self, **kwargs) -> LinearNormalizer:
         normalizer = LinearNormalizer()
@@ -245,7 +245,7 @@ def _get_replay_buffer(dataset_path, shape_meta, store):
                 assert tuple(shape) in [(2,),(6,)]
     
     action_shape = tuple(shape_meta['action']['shape'])
-    assert action_shape in [(2,),(6,)]
+    assert action_shape in [(2,),(7,)]
 
     # load data       #！！！！！
     cv2.setNumThreads(1)
@@ -271,21 +271,3 @@ def _get_replay_buffer(dataset_path, shape_meta, store):
             zarr_resize_index_last_dim(zarr_arr, idxs=[0,1])
 
     return replay_buffer
-
-
-def test():
-    import hydra
-    from omegaconf import OmegaConf
-    OmegaConf.register_new_resolver("eval", eval, replace=True)
-
-    with hydra.initialize('../diffusion_policy/config'):
-        cfg = hydra.compose('train_robomimic_real_image_workspace')
-        OmegaConf.resolve(cfg)
-        dataset = hydra.utils.instantiate(cfg.task.dataset)
-
-    from matplotlib import pyplot as plt
-    normalizer = dataset.get_normalizer()
-    nactions = normalizer['action'].normalize(dataset.replay_buffer['action'][:])
-    diff = np.diff(nactions, axis=0)
-    dists = np.linalg.norm(np.diff(nactions, axis=0), axis=-1)
-    _ = plt.hist(dists, bins=100); plt.title('real action velocity')

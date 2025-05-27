@@ -70,10 +70,10 @@ class TrainDiffusionUnetHybridWorkspace(BaseWorkspace):
 
         # configure dataset
         dataset: BaseImageDataset
-        dataset = hydra.utils.instantiate(cfg.task.dataset)
+        dataset = hydra.utils.instantiate(cfg.task.dataset) ###数据集实例化
         assert isinstance(dataset, BaseImageDataset)
         train_dataloader = DataLoader(dataset, **cfg.dataloader)
-        normalizer = dataset.get_normalizer()
+        normalizer = dataset.get_normalizer()  #归一化数据集！！！！！
 
         # configure validation dataset
         val_dataset = dataset.get_validation_dataset()
@@ -105,7 +105,7 @@ class TrainDiffusionUnetHybridWorkspace(BaseWorkspace):
 
         # configure env
         env_runner: BaseImageRunner
-        env_runner = hydra.utils.instantiate(
+        env_runner = hydra.utils.instantiate(    #会卡住
             cfg.task.env_runner,
             output_dir=self.output_dir)
         assert isinstance(env_runner, BaseImageRunner)

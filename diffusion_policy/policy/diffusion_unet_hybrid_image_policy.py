@@ -99,7 +99,7 @@ class DiffusionUnetHybridImagePolicy(BaseImagePolicy):
                 device='cpu',
             )
 
-        obs_encoder = policy.nets['policy'].nets['encoder'].nets['obs']
+        obs_encoder = policy.nets['policy'].nets['encoder'].nets['obs']#！！！！！
         
         if obs_encoder_group_norm:
             # replace batch norm with group norm
@@ -287,20 +287,20 @@ class DiffusionUnetHybridImagePolicy(BaseImagePolicy):
         nobs = self.normalizer.normalize(batch['obs'])
         nactions = self.normalizer['action'].normalize(batch['action'])
         batch_size = nactions.shape[0]
-        horizon = nactions.shape[1]
+        horizon = nactions.shape[1]  #时间步 16个时间步
 
-        # handle different ways of passing observation
+        # handle different ways of passing observation                                              #image[64 16 3 96 96] pos[64 16 2] action[64 16 2]
         local_cond = None
         global_cond = None
         trajectory = nactions
         cond_data = trajectory
-        if self.obs_as_global_cond:
+        if self.obs_as_global_cond:   #True
             # reshape B, T, ... to B*T
             this_nobs = dict_apply(nobs, 
-                lambda x: x[:,:self.n_obs_steps,...].reshape(-1,*x.shape[2:]))
-            nobs_features = self.obs_encoder(this_nobs)
+                lambda x: x[:,:self.n_obs_steps,...].reshape(-1,*x.shape[2:]))     #self.n_obs_steps:2  相当于每个变量都取前2个时间步，然后B*T进行reshape
+            nobs_features = self.obs_encoder(this_nobs) #编码器   image:[128 3 96 96]  agent_pos[128 2] batch:64 time:2  nobs_feature:[128 66]  把image和agent_pos cat在一起
             # reshape back to B, Do
-            global_cond = nobs_features.reshape(batch_size, -1)
+            global_cond = nobs_features.reshape(batch_size, -1) #[64 132]   66*2=132
         else:
             # reshape B, T, ... to B*T
             this_nobs = dict_apply(nobs, lambda x: x.reshape(-1, *x.shape[2:]))
@@ -311,20 +311,20 @@ class DiffusionUnetHybridImagePolicy(BaseImagePolicy):
             trajectory = cond_data.detach()
 
         # generate impainting mask
-        condition_mask = self.mask_generator(trajectory.shape)
+        condition_mask = self.mask_generator(trajectory.shape)   #加上掩码   trajectory.shape [64 16 2]
 
         # Sample noise that we'll add to the images
-        noise = torch.randn(trajectory.shape, device=trajectory.device)
-        bsz = trajectory.shape[0]
+        noise = torch.randn(trajectory.shape, device=trajectory.device)       #noise [64 16 2]
+        bsz = trajectory.shape[0]  #[64]
         # Sample a random timestep for each image
         timesteps = torch.randint(
             0, self.noise_scheduler.config.num_train_timesteps, 
             (bsz,), device=trajectory.device
-        ).long()
+        ).long()  #[64]
         # Add noise to the clean images according to the noise magnitude at each timestep
         # (this is the forward diffusion process)
         noisy_trajectory = self.noise_scheduler.add_noise(
-            trajectory, noise, timesteps)
+            trajectory, noise, timesteps)    #[64 16 2]
         
         # compute loss mask
         loss_mask = ~condition_mask
@@ -337,7 +337,7 @@ class DiffusionUnetHybridImagePolicy(BaseImagePolicy):
             local_cond=local_cond, global_cond=global_cond)
 
         pred_type = self.noise_scheduler.config.prediction_type 
-        if pred_type == 'epsilon':
+        if pred_type == 'epsilon':    #预测噪声
             target = noise
         elif pred_type == 'sample':
             target = trajectory
@@ -348,4 +348,4 @@ class DiffusionUnetHybridImagePolicy(BaseImagePolicy):
         loss = loss * loss_mask.type(loss.dtype)
         loss = reduce(loss, 'b ... -> b (...)', 'mean')
         loss = loss.mean()
-        return loss
+        return loss       #计算loss
